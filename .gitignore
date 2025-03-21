@@ -59,6 +59,12 @@ logs/
 *.log
 log/
 
+# H2 Database
+data/
+*.db
+*.trace.db
+*.lock.db
+
 # Others
 bin/
 tmp/
