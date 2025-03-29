@@ -34,7 +34,7 @@ Note: The database is configured in MySQL compatibility mode, which means you ca
 
 ## Technologies Used
 
-- Spring Boot 3.2.3
+- Spring Boot 3.2.12
 - Spring Batch
 - Java 21
 - H2 Database (with MySQL compatibility)
