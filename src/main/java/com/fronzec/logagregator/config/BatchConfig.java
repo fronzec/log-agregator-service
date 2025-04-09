@@ -14,6 +14,7 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.core.ChunkListener;
 import org.springframework.batch.core.scope.context.ChunkContext;
+import org.springframework.batch.item.ItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
@@ -69,7 +70,8 @@ public class BatchConfig {
     private static class LoggingWriteListener implements ChunkListener {
         @Override
         public void beforeChunk(@NonNull ChunkContext context) {
-            logger.info("About to process chunk");
+            logger.info("About to process chunk with size {}", context.getStepContext().getStepExecution().getWriteCount());
+
         }
 
         @Override
@@ -83,8 +85,14 @@ public class BatchConfig {
 
         @Override
         public void afterChunkError(@NonNull ChunkContext context) {
-            logger.error("Error processing chunk. Items read: {}", 
+            logger.error("Error processing chunk. Items read: {}",
                 context.getStepContext().getStepExecution().getReadCount());
+        }
+    }
+
+    public class ProcessingInterruptedException extends RuntimeException {
+        public ProcessingInterruptedException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
@@ -117,6 +125,29 @@ public class BatchConfig {
 
     @Bean
     @StepScope
+    public ItemProcessor<LogData, LogData> processor() {
+        return item -> {
+            // Simulate CPU-intensive processing
+            simulateHeavyProcessing();
+
+            // Enrich the log message with additional information
+            item.setMessage("[Processed] " + item.getMessage());
+            return item;
+        };
+    }
+
+    private void simulateHeavyProcessing() {
+        try {
+            // To simulate CPU-intensive processing
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ProcessingInterruptedException("Processing interrupted", e);
+        }
+    }
+
+    @Bean
+    @StepScope
     public JdbcBatchItemWriter<LogData> writer(DataSource dataSource) {
         JdbcBatchItemWriter<LogData> writer = new JdbcBatchItemWriter<>();
         writer.setDataSource(dataSource);
@@ -128,10 +159,12 @@ public class BatchConfig {
     @Bean
     @JobScope
     public Step step1(JobRepository jobRepository, PlatformTransactionManager transactionManager,
-                     FlatFileItemReader<LogData> reader, JdbcBatchItemWriter<LogData> writer) {
+                     FlatFileItemReader<LogData> reader, ItemProcessor<LogData, LogData> processor,
+                     JdbcBatchItemWriter<LogData> writer) {
         return new StepBuilder("step1", jobRepository)
                 .<LogData, LogData>chunk(10, transactionManager)
                 .reader(reader)
+                .processor(processor)
                 .writer(writer)
                 .listener(new LoggingWriteListener())
                 .build();
